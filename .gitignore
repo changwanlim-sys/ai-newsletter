@@ -1,0 +1,9 @@
+config_biz.json
+__pycache__/
+*.pyc
+.vercel
+.env
+.DS_Store
+*.lnk
+*.bat
+*.ps1

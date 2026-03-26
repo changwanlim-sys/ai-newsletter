@@ -1,0 +1,5 @@
+flask
+feedparser
+google-generativeai
+requests
+pytz

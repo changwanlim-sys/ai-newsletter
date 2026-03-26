@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Newsletter Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+    <div style="background: #22c55e; color: white; padding: 5px; text-align: center; font-weight: bold; font-size: 12px; z-index: 9999; position: relative;">
+        🚀 v1.2 실시간 에러 진단 모드 활성화됨 (캐시 우회 성공!)
+    </div>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i data-lucide="zap" class="icon-zap"></i>
+                <span>Newsletter Bot</span>
+            </div>
+            <nav>
+                <a href="#" class="nav-item active" data-tab="dashboard">
+                    <i data-lucide="layout-dashboard"></i> 대시보드
+                </a>
+                <a href="#" class="nav-item" data-tab="feeds">
+                    <i data-lucide="rss"></i> 뉴스 소스 관리
+                </a>
+                <a href="#" class="nav-item" data-tab="schedule">
+                    <i data-lucide="clock"></i> 발송 스케줄
+                </a>
+                <a href="#" class="nav-item" data-tab="settings">
+                    <i data-lucide="settings"></i> AI 및 계정 설정
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h1>AI 1인 창업자 뉴스레터 관리</h1>
+                <div class="status-badge">
+                    <span class="status-dot online"></span> Active <span style="margin-left:5px; opacity:0.6; font-size:10px;">v1.1 (Debug)</span>
+                </div>
+            </header>
+
+            <div id="dashboard" class="tab-content active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <label>최근 발송 시간</label>
+                        <div class="value">{{ config.get('last_run', '정보 없음') }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <label>등록된 뉴스 소스</label>
+                        <div class="value">{{ config.rss_feeds|length }}개</div>
+                    </div>
+                    <div class="stat-card action-card">
+                        <button onclick="runTest()" class="btn btn-outline" style="flex: 1;">
+                            <i data-lucide="pen-tool"></i> 바로 기사 작성
+                        </button>
+                        <button onclick="sendNow()" class="btn btn-primary" style="flex: 1;">
+                            <i data-lucide="send"></i> 지금 바로 발송
+                        </button>
+                    </div>
+                </div>
+
+                <div class="terminal-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <label style="margin-bottom: 0;">실행 로그 / AI 요약 미리보기 (수정 가능)</label>
+                        <span style="font-size: 11px; color: #64748b;">요약이 완료되면 내용을 자유롭게 수정하여 발송할 수 있습니다.</span>
+                    </div>
+                    <div id="output" contenteditable="true" class="terminal-body" style="outline: none; border: 1px solid transparent; transition: border-color 0.2s;">
+                        대기 중...
+                    </div>
+                </div>
+            </div>
+
+            <div id="feeds" class="tab-content">
+                <div class="card">
+                    <h2>RSS 뉴스 피드 리스트</h2>
+                    <div id="feed-list" class="list-group">
+                        {% for feed in config.rss_feeds %}
+                        <div class="list-item">
+                            <span>{{ feed }}</span>
+                            <button onclick="removeFeed('{{ feed }}')" class="btn-icon">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="input-row">
+                        <input type="text" id="new-feed" placeholder="새 RSS URL 입력">
+                        <button onclick="addFeed()" class="btn btn-primary">추가</button>
+                    </div>
+
+                    <h2 style="margin-top: 30px;">뉴스 요약 설정</h2>
+                    <div class="form-group">
+                        <label>선정할 기사 갯수</label>
+                        <input type="number" id="article-count" value="{{ config.article_count }}" min="1" max="20">
+                    </div>
+                </div>
+            </div>
+
+            <div id="schedule" class="tab-content">
+                <div class="card">
+                    <h2>발송 스케줄 설정</h2>
+                    
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label>발송 주기</label>
+                            <select id="schedule-type" onchange="updateScheduleTypeView()" style="width: 100%; background: #0f172a; border: 1px solid var(--border); color: white; padding: 10px; border-radius: 8px;">
+                                <option value="daily">매일 (Daily)</option>
+                                <option value="weekly">매주 (Weekly)</option>
+                                <option value="monthly">매월 (Monthly)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label id="interval-label">반복 간격 (일)</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="number" id="schedule-interval" value="1" min="1" style="flex: 1;">
+                                <span id="interval-unit">일마다</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="weekly-options" class="form-group" style="display: none; margin-bottom: 20px;">
+                        <label>발송 요일 선택</label>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;" id="weekly-days">
+                            <label class="check-tag"><input type="checkbox" value="1"> 월</label>
+                            <label class="check-tag"><input type="checkbox" value="2"> 화</label>
+                            <label class="check-tag"><input type="checkbox" value="3"> 수</label>
+                            <label class="check-tag"><input type="checkbox" value="4"> 목</label>
+                            <label class="check-tag"><input type="checkbox" value="5"> 금</label>
+                            <label class="check-tag"><input type="checkbox" value="6"> 토</label>
+                            <label class="check-tag"><input type="checkbox" value="0"> 일</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <label style="margin-bottom: 0;">발송 시간 설정 (다중 항목)</label>
+                            <button onclick="addTimeEntry()" class="btn btn-outline btn-sm">+ 시간 추가</button>
+                        </div>
+                        <div id="time-entries-list">
+                            <!-- 시간 항목 동적 추가 영역 -->
+                        </div>
+                    </div>
+
+                    <button onclick="saveScheduleSettings()" class="btn btn-primary" style="margin-top: 20px; width: 100%;">스케줄러 업데이트</button>
+                </div>
+            </div>
+
+            <div id="settings" class="tab-content">
+                <div class="card">
+                    <h2>Gemini AI 및 프롬프트 설정</h2>
+                    <div class="form-group">
+                        <label>AI 요약 조건 (Prompt)</label>
+                        <textarea id="custom-prompt" rows="4" style="width: 100%; background: #0f172a; border: 1px solid var(--border); padding: 12px; border-radius: 8px; color: white; border-radius: 8px;">{{ config.custom_prompt }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" id="gemini-key" value="{{ config.gemini_api_key }}">
+                    </div>
+                    
+                    <h2 style="margin-top: 30px;">이메일 설정</h2>
+                    <div class="form-group">
+                        <label>발신용 Gmail</label>
+                        <input type="text" id="email-sender" value="{{ config.email_sender }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Gmail 앱 비밀번호</label>
+                        <input type="password" id="email-password" value="{{ config.email_password }}">
+                    </div>
+                    <div class="form-group">
+                        <label>수신용 이메일</label>
+                        <input type="text" id="email-receiver" value="{{ config.email_receiver }}">
+                    </div>
+                    <button onclick="saveSettings()" class="btn btn-primary">설정 저장</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // 탭 전환 및 상태 유지 로직
+        const activeTab = localStorage.getItem('activeTab') || 'dashboard';
+        switchTab(activeTab);
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabId = item.getAttribute('data-tab');
+                switchTab(tabId);
+            });
+        });
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            
+            const targetContent = document.getElementById(tabId);
+            const targetNav = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+            
+            if (targetContent && targetNav) {
+                targetContent.classList.add('active');
+                targetNav.classList.add('active');
+                localStorage.setItem('activeTab', tabId);
+            }
+        }
+
+        const config = {{ config|tojson }};
+
+        async function saveConfig(newConfig, silent = false) {
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(newConfig)
+            });
+            if (resp.ok && !silent) {
+                // 저장 완료 후 페이지 새로고침 (탭 상태는 localStorage로 유지됨)
+                location.reload();
+            }
+        }
+
+        async function addFeed() {
+            const val = document.getElementById('new-feed').value.trim();
+            if (val && !config.rss_feeds.includes(val)) {
+                config.rss_feeds.push(val);
+                await saveConfig(config);
+            }
+        }
+
+        async function removeFeed(val) {
+            if (!confirm('이 소스를 삭제하시겠습니까?')) return;
+            config.rss_feeds = config.rss_feeds.filter(f => f !== val);
+            await saveConfig(config);
+        }
+
+        async function saveSettings() {
+            config.gemini_api_key = document.getElementById('gemini-key').value;
+            config.email_sender = document.getElementById('email-sender').value;
+            config.email_password = document.getElementById('email-password').value;
+            config.email_receiver = document.getElementById('email-receiver').value;
+            config.custom_prompt = document.getElementById('custom-prompt').value;
+            config.article_count = parseInt(document.getElementById('article-count').value) || 5;
+            await saveConfig(config);
+            alert('설정이 저장되었습니다.');
+        }
+
+        async function runTest() {
+            startStream(true);
+        }
+
+        async function sendNow() {
+            const content = document.getElementById('output').innerText;
+            if (content.includes('대기 중...') || content.length < 50) {
+                alert('발송할 내용이 충분하지 않습니다. 먼저 기사를 작성해 주세요.');
+                return;
+            }
+
+            if (!confirm('현재 화면에 보이는 내용을 실제로 발송하시겠습니까?')) return;
+            
+            const resp = await fetch('/api/send-content', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content: content })
+            });
+            const data = await resp.json();
+            if (data.status === 'success') alert('성공적으로 발송되었습니다!');
+            else alert('발송 실패: ' + data.message);
+        }
+
+        function startStream(dryRun) {
+            const output = document.getElementById('output');
+            output.innerText = ''; // 초기화
+            
+            const eventSource = new EventSource(`/api/stream-run?dry_run=${dryRun}`);
+            
+            eventSource.onmessage = function(event) {
+                const data = event.data;
+                
+                // 완료 마커 확인
+                if (data === '[DONE]') {
+                    eventSource.close();
+                    return;
+                }
+
+                // 새로운 라인 추가
+                const newLine = document.createElement('div');
+                newLine.style.marginBottom = '5px';
+                newLine.innerText = data;
+                output.appendChild(newLine);
+                
+                // 자동 스크롤
+                output.scrollTop = output.scrollHeight;
+            };
+
+            eventSource.onerror = function() {
+                eventSource.close();
+                const errorLine = document.createElement('div');
+                errorLine.style.color = '#ef4444';
+                errorLine.innerText = '⚠️ 연결이 종료되었거나 서버 오류가 발생했습니다.';
+                output.appendChild(errorLine);
+            };
+        }
+
+        async function updateSchedule() {
+            const resp = await fetch('/api/update-schedule', { method: 'POST' });
+            if (resp.ok) alert('윈도우 스케줄러가 업데이트되었습니다.');
+        }
+
+        // --- 상급 스케줄 기능 시작 ---
+        function updateScheduleTypeView() {
+            const type = document.getElementById('schedule-type').value;
+            const intervalLabel = document.getElementById('interval-label');
+            const intervalUnit = document.getElementById('interval-unit');
+            const weeklyOptions = document.getElementById('weekly-options');
+
+            weeklyOptions.style.display = (type === 'weekly') ? 'block' : 'none';
+
+            if (type === 'daily') {
+                intervalLabel.innerText = '반복 간격 (일)';
+                intervalUnit.innerText = '일마다';
+            } else if (type === 'weekly') {
+                intervalLabel.innerText = '반복 간격 (주)';
+                intervalUnit.innerText = '주마다';
+            } else {
+                intervalLabel.innerText = '반복 간격 (월)';
+                intervalUnit.innerText = '월마다';
+            }
+        }
+
+        function renderScheduleUI() {
+            const s = config.schedule_settings || { type: 'daily', interval: 1, days: [], times: [] };
+            document.getElementById('schedule-type').value = s.type;
+            document.getElementById('schedule-interval').value = s.interval;
+            
+            // 요일 체크박스
+            document.querySelectorAll('#weekly-days input').forEach(cb => {
+                cb.checked = s.days.includes(parseInt(cb.value));
+            });
+
+            // 시간 목록
+            const list = document.getElementById('time-entries-list');
+            list.innerHTML = '';
+            s.times.forEach((t, index) => {
+                const entry = document.createElement('div');
+                entry.className = 'time-entry';
+                entry.innerHTML = `
+                    <select onchange="updateTimeValue(${index}, 'period', this.value)">
+                        <option value="AM" ${t.period === 'AM' ? 'selected' : ''}>오전 (AM)</option>
+                        <option value="PM" ${t.period === 'PM' ? 'selected' : ''}>오후 (PM)</option>
+                    </select>
+                    <select onchange="updateTimeValue(${index}, 'hour', this.value)">
+                        ${Array.from({length:12}, (_, i) => `<option value="${i+1}" ${t.hour == i+1 ? 'selected' : ''}>${i+1}시</option>`).join('')}
+                    </select>
+                    <select onchange="updateTimeValue(${index}, 'minute', this.value)">
+                        ${Array.from({length:60}, (_, i) => `<option value="${i}" ${t.minute == i ? 'selected' : ''}>${i.toString().padStart(2, '0')}분</option>`).join('')}
+                    </select>
+                    <button onclick="removeTimeEntry(${index})" class="btn-icon" style="margin-left: auto;"><i data-lucide="trash-2"></i></button>
+                `;
+                list.appendChild(entry);
+            });
+            lucide.createIcons();
+            updateScheduleTypeView();
+        }
+
+        function addTimeEntry() {
+            if (!config.schedule_settings.times) config.schedule_settings.times = [];
+            config.schedule_settings.times.push({ period: 'AM', hour: 9, minute: 0 });
+            renderScheduleUI();
+        }
+
+        function removeTimeEntry(index) {
+            config.schedule_settings.times.splice(index, 1);
+            renderScheduleUI();
+        }
+
+        function updateTimeValue(index, key, val) {
+            config.schedule_settings.times[index][key] = (key === 'period' ? val : parseInt(val));
+        }
+
+        async function saveScheduleSettings() {
+            const s = config.schedule_settings;
+            s.type = document.getElementById('schedule-type').value;
+            s.interval = parseInt(document.getElementById('schedule-interval').value);
+            
+            if (s.type === 'weekly') {
+                s.days = Array.from(document.querySelectorAll('#weekly-days input:checked')).map(cb => parseInt(cb.value));
+            } else {
+                s.days = [];
+            }
+
+            await saveConfig(config, true);
+            await updateSchedule();
+        }
+
+        // 초기화
+        if (config.schedule_settings) renderScheduleUI();
+
+        // 서버 자동 종료를 위한 하트비트 (2초마다)
+        setInterval(() => {
+            fetch('/api/heartbeat', { method: 'POST' });
+        }, 2000);
+    </script>
+</body>
+</html>
